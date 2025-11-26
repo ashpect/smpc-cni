@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  node0:
+    build: ./node
+    container_name: node0
+    environment:
+      NODE_ID: 0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 1s
+      timeout: 1s
+      retries: 1
+
+
+  node1:
+    build: ./node
+    container_name: node1
+    environment:
+      NODE_ID: 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 1s
+      timeout: 1s
+      retries: 1
+
+
+  node2:
+    build: ./node
+    container_name: node2
+    environment:
+      NODE_ID: 2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 1s
+      timeout: 1s
+      retries: 1
+
+  orchestrator:
+    build: ./orchestrator
+    container_name: orchestrator
+    environment:
+      USE_K8S: "false"
+      NODE_COUNT: 3
+      
+    depends_on:
+      node0:
+        condition: service_healthy
+      node1:
+        condition: service_healthy
+      node2:
+        condition: service_healthy
