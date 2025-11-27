@@ -84,9 +84,6 @@ def main():
         print("SUCCESS: matches expected product modulo MOD.")
     else:
         print("ERROR: mismatch.")
-
-    print("Sleeping for 10 minutes...")
-    time.sleep(600)
     
 if __name__ == "__main__":
     main()
