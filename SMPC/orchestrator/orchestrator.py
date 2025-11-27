@@ -10,16 +10,19 @@ SERVICE = os.getenv("HEADLESS_SERVICE", "smpc")
 NAMESPACE = os.getenv("NAMESPACE", "default")
 PORT = int(os.getenv("NODE_PORT", "8000"))
 
-USE_K8S = os.getenv("USE_K8S", "false").lower() == "true"
+node1ip = "10.244.0.20"
+node2ip = "10.244.1.20"
+node3ip = "10.244.2.20"
 
 def pod_url(i):
-    if USE_K8S:
-        # Kubernetes StatefulSet + Headless service
-        return f"http://{BASE}-{i}.{SERVICE}.{NAMESPACE}.svc.cluster.local:{PORT}"
+    if i == 0:
+        return f"http://{node1ip}:{PORT}"
+    elif i == 1:
+        return f"http://{node2ip}:{PORT}"
+    elif i == 2:
+        return f"http://{node3ip}:{PORT}"
     else:
-        # Docker Compose — service names are just node0, node1, node2...
-        return f"http://node{i}:{PORT}"
-
+        raise ValueError(f"Invalid node index: {i}")
 
 def generate_beaver_triples_and_shares(n, MOD):
     a = random.randrange(0, MOD)
@@ -81,6 +84,9 @@ def main():
         print("SUCCESS: matches expected product modulo MOD.")
     else:
         print("ERROR: mismatch.")
+
+    print("Sleeping for 10 minutes...")
+    time.sleep(600)
     
 if __name__ == "__main__":
     main()

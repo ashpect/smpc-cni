@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Simple CNI plugin for Node 2
+# Pod IP: 10.244.1.20/32
+# Host veth IP: 10.244.1.101/32
+
+CMD="${CNI_COMMAND:-}"
+
+CONFIG="$(cat || true)"
+
+if [[ "$CMD" == "ADD" ]]; then
+  NETNS_PATH="${CNI_NETNS}"
+  IFNAME="${CNI_IFNAME}"
+  CONTAINER_ID="${CNI_CONTAINERID:-nocid}"
+
+  VETH_HOST="vethh-${CONTAINER_ID:0:8}"
+  VETH_NETNS="vethc-${CONTAINER_ID:0:8}"
+
+  POD_IP="10.244.1.20"
+  POD_CIDR="${POD_IP}/32"
+  HOST_IP="10.244.1.101"
+  HOST_CIDR="${HOST_IP}/32"
+
+  NETNS_NAME="ns-${CONTAINER_ID:0:8}"
+  mkdir -p /var/run/netns
+  ln -sf "${NETNS_PATH}" "/var/run/netns/${NETNS_NAME}"
+
+  ip link add "${VETH_HOST}" type veth peer name "${VETH_NETNS}"
+
+  ip link set "${VETH_NETNS}" netns "${NETNS_NAME}"
+
+  ip -n "${NETNS_NAME}" addr add "${POD_CIDR}" dev "${VETH_NETNS}"
+  ip addr add "${HOST_CIDR}" dev "${VETH_HOST}"
+
+  ip -n "${NETNS_NAME}" link set "${VETH_NETNS}" name "${IFNAME}"
+
+  ip link set "${VETH_HOST}" up
+  ip -n "${NETNS_NAME}" link set "${IFNAME}" up
+
+  ip -n "${NETNS_NAME}" route add "${HOST_IP}" dev "${IFNAME}"
+  ip -n "${NETNS_NAME}" route add default via "${HOST_IP}" dev "${IFNAME}"
+
+  ip route add "${POD_CIDR}" dev "${VETH_HOST}" scope host || true
+
+  MAC_HOST_VETH=$(ip link show "${VETH_HOST}" | awk '/link\/ether/ {print $2}')
+  MAC_NETNS_VETH=$(ip -n "${NETNS_NAME}" link show "${IFNAME}" | awk '/link\/ether/ {print $2}')
+
+  cat <<EOF
+{
+  "cniVersion": "1.0.0",
+  "interfaces": [
+    {
+      "name": "${VETH_HOST}",
+      "mac": "${MAC_HOST_VETH}"
+    },
+    {
+      "name": "${IFNAME}",
+      "mac": "${MAC_NETNS_VETH}",
+      "sandbox": "${NETNS_PATH}"
+    }
+  ],
+  "ips": [
+    {
+      "address": "${POD_CIDR}",
+      "interface": 1
+    }
+  ]
+}
+EOF
+
+elif [[ "$CMD" == "DEL" ]]; then
+  CONTAINER_ID="${CNI_CONTAINERID:-nocid}"
+  VETH_HOST="vethh-${CONTAINER_ID:0:8}"
+  NETNS_NAME="ns-${CONTAINER_ID:0:8}"
+
+  ip link del "${VETH_HOST}" 2>/dev/null || true
+  rm -f "/var/run/netns/${NETNS_NAME}" 2>/dev/null || true
+  exit 0
+else
+  echo "Unknown CNI_COMMAND: ${CMD}" >&2
+  exit 1
+fi
